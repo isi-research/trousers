@@ -712,7 +712,12 @@ TSPICALL Tspi_TPM_GetAuditDigest
     UINT32**            ordList                        // out
 );
 
-
+// <DS> adding another api function
+TSPICALL Tspi_TPM_RequestLocality
+(
+    TSS_HTPM            hTPM,                          // in
+    UINT32              ulLocality                     // in
+);
 
 // PcrComposite Class Definitions
 TSPICALL Tspi_PcrComposite_SelectPcrIndex

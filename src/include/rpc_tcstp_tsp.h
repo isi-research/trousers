@@ -231,6 +231,10 @@ TSS_RESULT RPC_Sign_TP(struct host_table_entry *,TCS_KEY_HANDLE,UINT32,BYTE *,TP
 #define RPC_Sign_TP(...)	TSPERR(TSS_E_INTERNAL_ERROR)
 #endif
 
+// <DS>
+TSS_RESULT RPC_RequestLocality_TP(struct host_table_entry *,UINT32);
+// </DS>
+
 #ifdef TSS_BUILD_RANDOM
 TSS_RESULT RPC_GetRandom_TP(struct host_table_entry *,UINT32,BYTE **);
 TSS_RESULT RPC_StirRandom_TP(struct host_table_entry *,UINT32,BYTE *);

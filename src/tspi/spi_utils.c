@@ -99,6 +99,7 @@ struct tcs_api_table tcs_normal_api = {
 	.GetRandom = RPC_GetRandom,
 	.StirRandom = RPC_StirRandom,
 #endif
+    .RequestLocality = RPC_RequestLocality,
 #ifdef TSS_BUILD_CAPS_TPM
 	.GetTPMCapability = RPC_GetTPMCapability,
 	.SetCapability = RPC_SetCapability,

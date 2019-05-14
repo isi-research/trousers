@@ -271,3 +271,20 @@ TSS_RESULT Tddli_Cancel(void)
 		return TDDLERR(TSS_E_NOTIMPL);
 	}
 }
+
+TSS_RESULT Tddli_RequestLocality(int locality)
+{
+    int rc;
+	LogDebug("Tddli_RequestLocality: locality=%d\n", locality);
+
+    if ((rc = ioctl(opened_device->fd, TPMIOC_REQUESTLOC, locality)) == -1) 
+    {
+        LogError("Tddli_RequestLocality ioctl: (%d) %s", errno, strerror(errno));
+        return TDDLERR(TDDL_E_FAIL);
+    }
+
+    return TSS_SUCCESS;
+}
+
+
+

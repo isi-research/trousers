@@ -36,4 +36,6 @@ TSS_RESULT Tddli_TransmitData(BYTE *pTransmitBuf,
 
 TSS_RESULT Tddli_Close(void);
 
+TSS_RESULT Tddli_RequestLocality(int locality);
+
 #endif

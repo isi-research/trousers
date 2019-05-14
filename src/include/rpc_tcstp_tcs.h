@@ -25,6 +25,8 @@ DECLARE_TCSTP_FUNC(GetCapability);
 DECLARE_TCSTP_FUNC(GetCapabilityOwner);
 DECLARE_TCSTP_FUNC(SetCapability);
 
+DECLARE_TCSTP_FUNC(RequestLocality);
+
 #ifdef TSS_BUILD_RANDOM
 DECLARE_TCSTP_FUNC(GetRandom);
 DECLARE_TCSTP_FUNC(StirRandom);

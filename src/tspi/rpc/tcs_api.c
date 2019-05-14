@@ -1350,6 +1350,29 @@ TSS_RESULT RPC_Sign(TSS_HCONTEXT tspContext,	/* in */
 	return result;
 }
 
+TSS_RESULT RPC_RequestLocality(TSS_HCONTEXT tspContext,	/* in */
+			 UINT32 localityRequested)	/* in */
+{
+
+	TSS_RESULT result = (TSS_E_INTERNAL_ERROR | TSS_LAYER_TSP);
+	struct host_table_entry *entry = get_table_entry(tspContext);
+
+	if (entry == NULL)
+		return TSPERR(TSS_E_NO_CONNECTION);
+
+	switch (entry->type) {
+		case CONNECTION_TYPE_TCP_PERSISTANT:
+			result = RPC_RequestLocality_TP(entry, localityRequested);
+			break;
+		default:
+			break;
+	}
+
+	put_table_entry(entry);
+
+	return result;
+}
+
 TSS_RESULT RPC_GetRandom(TSS_HCONTEXT tspContext,	/* in */
 			 UINT32 bytesRequested,	/* in */
 			 BYTE ** randomBytes)	/* out */

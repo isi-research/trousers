@@ -13,7 +13,8 @@ libtcs_a_SOURCES=log.c \
 		 rpc/@RPC@/rpc.c rpc/@RPC@/rpc_context.c \
 		 tcsi_caps_tpm.c rpc/@RPC@/rpc_caps_tpm.c \
 		 tcs_auth_mgr.c tcsi_auth.c rpc/@RPC@/rpc_auth.c \
-		 tcs_pbg.c
+		 tcs_pbg.c \
+		 tcsi_locality.c rpc/@RPC@/rpc_locality.c
 
 if TSS_BUILD_TRANSPORT
 libtcs_a_SOURCES+=tcsi_transport.c rpc/@RPC@/rpc_transport.c

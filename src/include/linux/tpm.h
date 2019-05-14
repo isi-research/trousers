@@ -26,6 +26,9 @@
 #define	TPMIOC_CANCEL		_IO('T', 0x00)
 #define	TPMIOC_TRANSMIT		_IO('T', 0x01)
 
+// <DS> 
+#define TPMIOC_REQUESTLOC    _IOW('T', 0x0A, uint64_t)
+
 #if defined(__KERNEL__)
 extern ssize_t tpm_transmit(const char *buf, size_t bufsiz);
 extern ssize_t tpm_extend(int index, u8 *digest);
