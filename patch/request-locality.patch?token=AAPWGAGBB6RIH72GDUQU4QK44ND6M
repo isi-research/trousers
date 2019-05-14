@@ -1,0 +1,434 @@
+diff --git a/src/include/linux/tpm.h b/src/include/linux/tpm.h
+index ee32c4d..f7e6ed6 100644
+--- a/src/include/linux/tpm.h
++++ b/src/include/linux/tpm.h
+@@ -26,6 +26,9 @@
+ #define	TPMIOC_CANCEL		_IO('T', 0x00)
+ #define	TPMIOC_TRANSMIT		_IO('T', 0x01)
+ 
++// <DS> 
++#define TPMIOC_REQUESTLOC    _IOW('T', 0x0A, uint64_t)
++
+ #if defined(__KERNEL__)
+ extern ssize_t tpm_transmit(const char *buf, size_t bufsiz);
+ extern ssize_t tpm_extend(int index, u8 *digest);
+diff --git a/src/include/rpc_tcstp_tcs.h b/src/include/rpc_tcstp_tcs.h
+index 57eab27..a4191ae 100644
+--- a/src/include/rpc_tcstp_tcs.h
++++ b/src/include/rpc_tcstp_tcs.h
+@@ -25,6 +25,8 @@ DECLARE_TCSTP_FUNC(GetCapability);
+ DECLARE_TCSTP_FUNC(GetCapabilityOwner);
+ DECLARE_TCSTP_FUNC(SetCapability);
+ 
++DECLARE_TCSTP_FUNC(RequestLocality);
++
+ #ifdef TSS_BUILD_RANDOM
+ DECLARE_TCSTP_FUNC(GetRandom);
+ DECLARE_TCSTP_FUNC(StirRandom);
+diff --git a/src/include/rpc_tcstp_tsp.h b/src/include/rpc_tcstp_tsp.h
+index 2d53a00..803a402 100644
+--- a/src/include/rpc_tcstp_tsp.h
++++ b/src/include/rpc_tcstp_tsp.h
+@@ -231,6 +231,10 @@ TSS_RESULT RPC_Sign_TP(struct host_table_entry *,TCS_KEY_HANDLE,UINT32,BYTE *,TP
+ #define RPC_Sign_TP(...)	TSPERR(TSS_E_INTERNAL_ERROR)
+ #endif
+ 
++// <DS>
++TSS_RESULT RPC_RequestLocality_TP(struct host_table_entry *,UINT32);
++// </DS>
++
+ #ifdef TSS_BUILD_RANDOM
+ TSS_RESULT RPC_GetRandom_TP(struct host_table_entry *,UINT32,BYTE **);
+ TSS_RESULT RPC_StirRandom_TP(struct host_table_entry *,UINT32,BYTE *);
+diff --git a/src/include/spi_utils.h b/src/include/spi_utils.h
+index 11255b2..bd1d826 100644
+--- a/src/include/spi_utils.h
++++ b/src/include/spi_utils.h
+@@ -213,6 +213,7 @@ TSS_RESULT Transport_ChangeAuthOwner(TSS_HCONTEXT, TCPA_PROTOCOL_ID, TCPA_ENCAUT
+                                  TPM_AUTH *);
+ TSS_RESULT RPC_TerminateHandle(TSS_HCONTEXT, TCS_AUTHHANDLE);
+ TSS_RESULT Transport_TerminateHandle(TSS_HCONTEXT, TCS_AUTHHANDLE);
++TSS_RESULT RPC_RequestLocality(TSS_HCONTEXT, UINT32);
+ TSS_RESULT RPC_GetRandom(TSS_HCONTEXT, UINT32, BYTE **);
+ TSS_RESULT Transport_GetRandom(TSS_HCONTEXT, UINT32, BYTE **);
+ TSS_RESULT RPC_ChangeAuthAsymStart(TSS_HCONTEXT, TCS_KEY_HANDLE, TCPA_NONCE, UINT32, BYTE *,
+@@ -524,6 +525,7 @@ struct tcs_api_table {
+ 	TSS_RESULT (*Sign)(TSS_HCONTEXT, TCS_KEY_HANDLE, UINT32, BYTE *, TPM_AUTH *, UINT32 *,
+ 			   BYTE **);
+ #endif
++	TSS_RESULT (*RequestLocality)(TSS_HCONTEXT, UINT32);
+ #ifdef TSS_BUILD_RANDOM
+ 	TSS_RESULT (*GetRandom)(TSS_HCONTEXT, UINT32, BYTE **);
+ 	TSS_RESULT (*StirRandom)(TSS_HCONTEXT, UINT32, BYTE *);
+diff --git a/src/include/tcsd_wrap.h b/src/include/tcsd_wrap.h
+index b320d74..9a4bf43 100644
+--- a/src/include/tcsd_wrap.h
++++ b/src/include/tcsd_wrap.h
+@@ -184,8 +184,11 @@ enum TCSD_ORD {
+ 	TCSD_ORD_KEYCONTROLOWNER = 121,
+ 	TCSD_ORD_DSAP = 122,
+ 
++    // <DS>
++	TCSD_ORD_REQUESTLOCALITY =123,
++
+ 	/* Last */
+-	TCSD_LAST_ORD = 123
++	TCSD_LAST_ORD = 124
+ };
+ #define TCSD_MAX_NUM_ORDS TCSD_LAST_ORD
+ 
+diff --git a/src/include/tddl.h b/src/include/tddl.h
+index cf5bb3a..71df820 100644
+--- a/src/include/tddl.h
++++ b/src/include/tddl.h
+@@ -36,4 +36,6 @@ TSS_RESULT Tddli_TransmitData(BYTE *pTransmitBuf,
+ 
+ TSS_RESULT Tddli_Close(void);
+ 
++TSS_RESULT Tddli_RequestLocality(int locality);
++
+ #endif
+diff --git a/src/include/tss/tspi.h b/src/include/tss/tspi.h
+index 1d188f7..59e619f 100644
+--- a/src/include/tss/tspi.h
++++ b/src/include/tss/tspi.h
+@@ -712,7 +712,12 @@ TSPICALL Tspi_TPM_GetAuditDigest
+     UINT32**            ordList                        // out
+ );
+ 
+-
++// <DS> adding another api function
++TSPICALL Tspi_TPM_RequestLocality
++(
++    TSS_HTPM            hTPM,                          // in
++    UINT32              ulLocality                     // in
++);
+ 
+ // PcrComposite Class Definitions
+ TSPICALL Tspi_PcrComposite_SelectPcrIndex
+diff --git a/src/tcs/Makefile.am b/src/tcs/Makefile.am
+index ce48de8..ae1c770 100644
+--- a/src/tcs/Makefile.am
++++ b/src/tcs/Makefile.am
+@@ -13,7 +13,8 @@ libtcs_a_SOURCES=log.c \
+ 		 rpc/@RPC@/rpc.c rpc/@RPC@/rpc_context.c \
+ 		 tcsi_caps_tpm.c rpc/@RPC@/rpc_caps_tpm.c \
+ 		 tcs_auth_mgr.c tcsi_auth.c rpc/@RPC@/rpc_auth.c \
+-		 tcs_pbg.c
++		 tcs_pbg.c \
++		 tcsi_locality.c rpc/@RPC@/rpc_locality.c
+ 
+ if TSS_BUILD_TRANSPORT
+ libtcs_a_SOURCES+=tcsi_transport.c rpc/@RPC@/rpc_transport.c
+diff --git a/src/tcs/rpc/tcstp/rpc.c b/src/tcs/rpc/tcstp/rpc.c
+index cc8a085..32e5e9e 100644
+--- a/src/tcs/rpc/tcstp/rpc.c
++++ b/src/tcs/rpc/tcstp/rpc.c
+@@ -512,7 +512,8 @@ DispatchTable tcs_func_table[TCSD_MAX_NUM_ORDS] = {
+ 	{tcs_wrap_CMK_ConvertMigration,"CMK_ConvertMigration"},
+ 	{tcs_wrap_FlushSpecific,"FlushSpecific"}, /* 120 */
+ 	{tcs_wrap_KeyControlOwner, "KeyControlOwner"},
+-	{tcs_wrap_DSAP, "DSAP"}
++	{tcs_wrap_DSAP, "DSAP"}, 
++	{tcs_wrap_RequestLocality, "RequestLocality"} /* 123 */
+ };
+ 
+ int
+diff --git a/src/tcs/rpc/tcstp/rpc_locality.c b/src/tcs/rpc/tcstp/rpc_locality.c
+new file mode 100644
+index 0000000..453e577
+--- /dev/null
++++ b/src/tcs/rpc/tcstp/rpc_locality.c
+@@ -0,0 +1,67 @@
++
++
++#include <stdlib.h>
++#include <stdio.h>
++#include <syslog.h>
++#include <string.h>
++#include <netdb.h>
++
++#include "trousers/tss.h"
++#include "trousers_types.h"
++#include "tcs_tsp.h"
++#include "tcs_utils.h"
++#include "tcs_int_literals.h"
++#include "capabilities.h"
++#include "tcslog.h"
++#include "tcsd_wrap.h"
++#include "tcsd.h"
++#include "tcs_utils.h"
++#include "rpc_tcstp_tcs.h"
++
++TSS_RESULT
++tcs_wrap_RequestLocality(struct tcsd_thread_data *data)
++{
++	TCS_CONTEXT_HANDLE hContext;
++	UINT32 locDataSizeIn;
++	BYTE *locDataIn;
++	TSS_RESULT result;
++
++	if (getData(TCSD_PACKET_TYPE_UINT32, 0, &hContext, 0, &data->comm))
++    {
++        LogDebug("tcs_wrap_RequestLocality: failed to get data for index 0\n"); 
++		return TCSERR(TSS_E_INTERNAL_ERROR);
++    }
++
++	if ((result = ctx_verify_context(hContext)))
++		goto done;
++
++	LogDebugFn("thread %ld context %x", THREAD_ID, hContext);
++
++    LogDebug("rpc_locality.c: tcs_wrap_RequestLocality. num_parms=%d\n", 
++        data->comm.hdr.num_parms);
++
++	if (getData(TCSD_PACKET_TYPE_UINT32, 1, &locDataSizeIn, 0, &data->comm))
++    {
++        LogDebug("tcs_wrap_RequestLocality: failed to get data for index 1\n"); 
++		return TCSERR(TSS_E_INTERNAL_ERROR);
++    }
++
++	locDataIn = (BYTE *)malloc(locDataSizeIn);
++	if (locDataIn == NULL) {
++		LogError("malloc of %u bytes failed.", locDataSizeIn);
++		return TCSERR(TSS_E_OUTOFMEMORY);
++	}
++
++	MUTEX_LOCK(tcsp_lock);
++
++	result = TCSP_RequestLocality_Internal(hContext, locDataSizeIn, locDataIn);
++
++	MUTEX_UNLOCK(tcsp_lock);
++	free(locDataIn);
++done:
++	initData(&data->comm, 0);
++	data->comm.hdr.u.result = result;
++
++	return result;
++}
++
+diff --git a/src/tcs/tcsi_locality.c b/src/tcs/tcsi_locality.c
+new file mode 100644
+index 0000000..edcf40f
+--- /dev/null
++++ b/src/tcs/tcsi_locality.c
+@@ -0,0 +1,43 @@
++
++#include <stdlib.h>
++#include <stdio.h>
++#include <string.h>
++#include <inttypes.h>
++
++#include "trousers/tss.h"
++#include "trousers_types.h"
++#include "tcs_tsp.h"
++#include "tcsps.h"
++#include "tcs_utils.h"
++#include "tcs_int_literals.h"
++#include "capabilities.h"
++#include "tcslog.h"
++#include "req_mgr.h"
++#include "tcsd_wrap.h"
++#include "tcsd.h"
++#include "tddl.h"
++
++
++TSS_RESULT
++TCSP_RequestLocality_Internal(TCS_CONTEXT_HANDLE hContext,	/* in */
++			 UINT32 localityRequested)	/* in */
++{
++	UINT64 offset = 0;
++	UINT32 paramSize;
++	TSS_RESULT result;
++	BYTE txBlob[TSS_TPM_TXBLOB_SIZE];
++
++	if (localityRequested > 4) {
++		LogDebugFn("invalid locality! (%u)", localityRequested);
++		return TCSERR(TSS_E_BAD_PARAMETER);
++	}
++
++	if ((result = ctx_verify_context(hContext)))
++		return result;
++
++    Tddli_RequestLocality(localityRequested);
++
++	LogResult("TCSP_RequestLocality_Internal", result);
++	return result;
++}
++
+diff --git a/src/tddl/tddl.c b/src/tddl/tddl.c
+index b4f95b2..c40bbaa 100644
+--- a/src/tddl/tddl.c
++++ b/src/tddl/tddl.c
+@@ -271,3 +271,20 @@ TSS_RESULT Tddli_Cancel(void)
+ 		return TDDLERR(TSS_E_NOTIMPL);
+ 	}
+ }
++
++TSS_RESULT Tddli_RequestLocality(int locality)
++{
++    int rc;
++	LogDebug("Tddli_RequestLocality: locality=%d\n", locality);
++
++    if ((rc = ioctl(opened_device->fd, TPMIOC_REQUESTLOC, locality)) == -1) 
++    {
++        LogError("Tddli_RequestLocality ioctl: (%d) %s", errno, strerror(errno));
++        return TDDLERR(TDDL_E_FAIL);
++    }
++
++    return TSS_SUCCESS;
++}
++
++
++
+diff --git a/src/tspi/Makefile.am b/src/tspi/Makefile.am
+index 0dd257b..faab666 100644
+--- a/src/tspi/Makefile.am
++++ b/src/tspi/Makefile.am
+@@ -34,7 +34,9 @@ libtspi_la_SOURCES=log.c \
+                    rpc/tcs_api.c \
+                    rpc/hosttable.c \
+                    rpc/@RPC@/rpc.c \
+-                   tsp_tcsi_param.c
++                   tsp_tcsi_param.c \
++                   tspi_locality.c \
++                   rpc/@RPC@/rpc_locality.c
+ 
+ if TSS_BUILD_ASYM_CRYPTO
+ libtspi_la_SOURCES+=tsp_asym.c
+diff --git a/src/tspi/rpc/tcs_api.c b/src/tspi/rpc/tcs_api.c
+index 3eeb1fb..6d971c7 100644
+--- a/src/tspi/rpc/tcs_api.c
++++ b/src/tspi/rpc/tcs_api.c
+@@ -1350,6 +1350,29 @@ TSS_RESULT RPC_Sign(TSS_HCONTEXT tspContext,	/* in */
+ 	return result;
+ }
+ 
++TSS_RESULT RPC_RequestLocality(TSS_HCONTEXT tspContext,	/* in */
++			 UINT32 localityRequested)	/* in */
++{
++
++	TSS_RESULT result = (TSS_E_INTERNAL_ERROR | TSS_LAYER_TSP);
++	struct host_table_entry *entry = get_table_entry(tspContext);
++
++	if (entry == NULL)
++		return TSPERR(TSS_E_NO_CONNECTION);
++
++	switch (entry->type) {
++		case CONNECTION_TYPE_TCP_PERSISTANT:
++			result = RPC_RequestLocality_TP(entry, localityRequested);
++			break;
++		default:
++			break;
++	}
++
++	put_table_entry(entry);
++
++	return result;
++}
++
+ TSS_RESULT RPC_GetRandom(TSS_HCONTEXT tspContext,	/* in */
+ 			 UINT32 bytesRequested,	/* in */
+ 			 BYTE ** randomBytes)	/* out */
+diff --git a/src/tspi/rpc/tcstp/rpc_locality.c b/src/tspi/rpc/tcstp/rpc_locality.c
+new file mode 100644
+index 0000000..b1079a0
+--- /dev/null
++++ b/src/tspi/rpc/tcstp/rpc_locality.c
+@@ -0,0 +1,39 @@
++
++#include <stdlib.h>
++#include <stdio.h>
++#include <string.h>
++#include <assert.h>
++
++#include "trousers/tss.h"
++#include "trousers/trousers.h"
++#include "trousers_types.h"
++#include "spi_utils.h"
++#include "capabilities.h"
++#include "tsplog.h"
++#include "hosttable.h"
++#include "tcsd_wrap.h"
++#include "obj.h"
++#include "rpc_tcstp_tsp.h"
++
++TSS_RESULT
++RPC_RequestLocality_TP(struct host_table_entry *hte,
++		  UINT32 localityRequested)	/* in */
++{
++	TSS_RESULT result;
++
++	initData(&hte->comm, 2);
++	hte->comm.hdr.u.ordinal = TCSD_ORD_REQUESTLOCALITY;
++	LogDebugFn("TCS Context: 0x%x", hte->tcsContext);
++
++	if (setData(TCSD_PACKET_TYPE_UINT32, 0, &hte->tcsContext, 0, &hte->comm))
++		return TSPERR(TSS_E_INTERNAL_ERROR);
++	if (setData(TCSD_PACKET_TYPE_UINT32, 1, &localityRequested, 0, &hte->comm))
++		return TSPERR(TSS_E_INTERNAL_ERROR);
++
++	result = sendTCSDPacket(hte);
++
++	if (result == TSS_SUCCESS)
++		result = hte->comm.hdr.u.result;
++
++	return result;
++}
+diff --git a/src/tspi/spi_utils.c b/src/tspi/spi_utils.c
+index de80bc1..83121c7 100644
+--- a/src/tspi/spi_utils.c
++++ b/src/tspi/spi_utils.c
+@@ -99,6 +99,7 @@ struct tcs_api_table tcs_normal_api = {
+ 	.GetRandom = RPC_GetRandom,
+ 	.StirRandom = RPC_StirRandom,
+ #endif
++    .RequestLocality = RPC_RequestLocality,
+ #ifdef TSS_BUILD_CAPS_TPM
+ 	.GetTPMCapability = RPC_GetTPMCapability,
+ 	.SetCapability = RPC_SetCapability,
+diff --git a/src/tspi/tspi_locality.c b/src/tspi/tspi_locality.c
+new file mode 100644
+index 0000000..33ddc30
+--- /dev/null
++++ b/src/tspi/tspi_locality.c
+@@ -0,0 +1,39 @@
++
++
++#include <stdlib.h>
++#include <stdio.h>
++#include <string.h>
++#include <inttypes.h>
++
++#include "trousers/tss.h"
++#include "trousers/trousers.h"
++#include "trousers_types.h"
++#include "spi_utils.h"
++#include "capabilities.h"
++#include "tsplog.h"
++#include "obj.h"
++
++
++TSS_RESULT
++Tspi_TPM_RequestLocality(TSS_HTPM hTPM,		/* in */
++		   UINT32 ulLocality)
++{
++	TSS_HCONTEXT tspContext;
++	TSS_RESULT result;
++
++	if ( ulLocality > 4 )
++		return TSPERR(TSS_E_BAD_PARAMETER);
++
++	if ((result = obj_tpm_get_tsp_context(hTPM, &tspContext)))
++		return result;
++
++    LogDebug("Tspi_TPM_RequestLocality: locality = %d\n", ulLocality);
++
++	if ((result = TCS_API(tspContext)->RequestLocality(tspContext, ulLocality)))
++    {
++		return result;
++    }
++
++	return TSS_SUCCESS;
++}
++

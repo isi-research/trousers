@@ -1,0 +1,25 @@
+From 760c0819db626b9daf543eaaa7c7385e509ca893 Mon Sep 17 00:00:00 2001
+From: David Stark <david.stark@intusurg.com>
+Date: Tue, 12 Dec 2017 15:23:25 -0800
+Subject: [PATCH] Changing system ps file to /nvram/tpm/system.data
+
+---
+ dist/tcsd.conf.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dist/tcsd.conf.in b/dist/tcsd.conf.in
+index 2bf23e0..0e34006 100644
+--- a/dist/tcsd.conf.in
++++ b/dist/tcsd.conf.in
+@@ -26,7 +26,7 @@
+ # Values: Any absolute directory path
+ # Description: Path where the tcsd creates its persistent storage file.
+ #
+-# system_ps_file = @localstatedir@/lib/tpm/system.data
++system_ps_file = /nvram/tpm/system.data
+ #
+ 
+ # Option: firmware_log_file
+-- 
+2.7.4
+
