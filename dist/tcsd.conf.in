@@ -26,7 +26,7 @@
 # Values: Any absolute directory path
 # Description: Path where the tcsd creates its persistent storage file.
 #
-# system_ps_file = @localstatedir@/lib/tpm/system.data
+system_ps_file = /nvram/tpm/system.data
 #
 
 # Option: firmware_log_file
